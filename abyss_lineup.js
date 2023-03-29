@@ -26,6 +26,8 @@ export class AbyssLineup extends plugin {
         reg: '^#深渊怪物更新$',
         /** 执行方法 Method */
         fnc: 'updateData',
+        /** 使用权限 Permission */
+        permission: 'master'
       },
       {
         /** 命令正则匹配 Regex */
@@ -53,10 +55,11 @@ export class AbyssLineup extends plugin {
     let abyss_data_dir = "./data/spiral-abyss-lineup-data/"
 
     if (!fs.existsSync(abyss_data_dir)) {
+      logger.info("Initializing abyss data...")
       const command = "git clone https://gitee.com/rrmmxxuu/spiral-abyss-lineup-data.git"
       exec(command, { cwd: base_data_dir }, function (error, stdout, stderr) {    
         if (error) {
-          logger.error("Spiral Abyss data failed to initialize!" + error.code)
+          logger.error("Spiral Abyss data failed to initialize!" + error.stack)
         } else {
           logger.info("Spiral Abyss data initialization successful.")
         }
@@ -68,41 +71,121 @@ export class AbyssLineup extends plugin {
   async abyssLineup (e) {
     logger.info('[用户命令]', e.msg)
     
-    let ver = e.msg.replace("#", "").trim()
-    ver = ver.replace("深渊怪物", "").trim()
-    const regex = /^\d\.\d$/
+    const ver_floor_regex = /^(\d\.\d)?(.*)$/u
     const dir = "./data/spiral-abyss-lineup-data/"
-    const latest_ver_file = "./data/spiral-abyss-lineup-data/latest_ver.yaml"
+    const ver_data = this.read_ver()
 
-    if (!ver) {
-      if (fs.existsSync(latest_ver_file)) {
-        const file = fs.readFileSync(latest_ver_file, 'utf8')
-        const latest_ver = YAML.parse(file)
-        ver = latest_ver['latest-ver']
-        await e.reply("未指定版本号，将返回最新版本深渊怪物")
-      } else {
-        logger.error("latest_ver.yaml does not exist!")
-        return false
+    let ver_floor = e.msg.replace("#", "").trim()
+    ver_floor = ver_floor.replace("深渊怪物", "").trim()
+
+    /** if version and floor not specified */
+    if (!ver_floor) {
+      logger.info("Version and floor not specified, return current version 11 and 12 floor.")
+      await e.reply("未指定版本和层数，将返回当前版本十一层及十二层怪物信息")
+
+      let ver = ver_data['curr-ver']
+      let ver_key = ver + "-" + "11"
+      if (ver_key in ver_data.ver) {
+        ver_key = ver_data.ver[ver_key]
+        let file_path = dir + ver_key + ".jpg"
+        await this.sendData(e, file_path)
       }
+
+      ver_key = ver + "-" + "12"
+
+      if (ver_key in ver_data.ver) {
+        ver_key = ver_data.ver[ver_key]
+        let file_path = dir + ver_key + ".jpg"
+        await this.sendData(e, file_path)
+      }
+      
+      return true
     }
     
-    if (!regex.test(ver)) {
-      await e.reply("请输入正确的版本号格式！例如：#3.6深渊怪物")
-      logger.error("Invalid version number.")
+    /** Handle parameters */
+    let [, ver, floor] = ver_floor.match(ver_floor_regex)
+
+    if (!ver) {
+      logger.info("Version not specified, return the current version.")
+      ver = ver_data['curr-ver']
+    }
+
+    if (!floor) {
+      floor = "all"
+    } else if (floor === "十一层"){
+      floor = "11"
+    } else if (floor === "十二层") {
+      floor = "12"
+    } else {
+      logger.warn("Incorrect floor input")
+      await e.reply("不正确的输入，请在#版本 后输入十一层或十二层，或不指定层数以返回十一层和十二层")
       return false
     }
 
-    let file_path = dir + ver + ".png"
+    let ver_key = ver + "-" + floor
+    logger.info(ver_key)
+    
+    if (floor === "all"){
+      let ver_key_11 = ver + "-" + "11"
+      let ver_key_12 = ver + "-" + "12"
 
-    if (fs.existsSync(file_path)){
-        await e.reply(await segment.image(file_path))
-        logger.info("Successful.")
-        return true
-      } else {
-        await e.reply("暂无" + ver + "版本深渊信息")
-        logger.error("Failed, abyss version does not exist.")
+      if (!(ver_key_11 in ver_data.ver) && !(ver_key_12 in ver_data.ver)){
+        logger.warn("Abyss Data does not exist")
+        await e.reply("此版本/层数深渊数据不存在")
         return false
       }
+
+      if (ver_data.ver[ver_key_11] === ver_data.ver[ver_key_12]) {
+        let file_path = dir + ver_data.ver[ver_key_11] + ".jpg"
+        await this.sendData(e, file_path)
+        return true
+      }
+
+      ver_key = ver + "-" + "11"
+      if (ver_key in ver_data.ver) {
+        ver_key = ver_data.ver[ver_key]
+        let file_path = dir + ver_key + ".jpg"
+        await this.sendData(e, file_path)
+      } else {
+        logger.warn("Abyss Data does not exist")
+        await e.reply("此版本/层数深渊数据不存在")
+      }
+
+      ver_key = ver + "-" + "12"
+      if (ver_key in ver_data.ver) {
+        ver_key = ver_data.ver[ver_key]
+        let file_path = dir + ver_key + ".jpg"
+        await this.sendData(e, file_path)
+      } else {
+        logger.warn("Abyss Data does not exist")
+        await e.reply("此版本/层数深渊数据不存在")
+      }
+      
+      return true
+    } else if (floor === "11") {
+      if (ver_key in ver_data.ver) {
+        ver_key = ver_data.ver[ver_key]
+        let file_path = dir + ver_key + ".jpg"
+        await this.sendData(e, file_path)
+      } else {
+        logger.warn("Abyss Data does not exist")
+        await e.reply("此版本/层数深渊数据不存在")
+      }
+    } else {
+      if (ver_key in ver_data.ver) {
+        ver_key = ver_data.ver[ver_key]
+        let file_path = dir + ver_key + ".jpg"
+        await this.sendData(e, file_path)
+      } else {
+        logger.warn("Abyss Data does not exist")
+        await e.reply("此版本/层数深渊数据不存在")
+      }
+    }
+  }
+
+  async sendData(e, file_path) {
+    await e.reply(await segment.image(file_path))
+    logger.info("Successful.")
   }
 
   /** 更新深渊怪物数据 Spiral Abyss data update */
@@ -124,7 +207,7 @@ export class AbyssLineup extends plugin {
       }
       if (error) {
         logger.error("Spiral Abyss data update failed!" + error.stack)
-        e.reply("更新失败！")
+        e.reply("更新失败!" + error.stack)
         return false
       } else {
         logger.info("Spiral Abyss data update successful.")
@@ -138,6 +221,19 @@ export class AbyssLineup extends plugin {
   async help(e) {
     logger.info('[用户命令]', e.msg)
 
-    await e.reply("发送 #版本号+深渊怪物即可查询深渊怪物数据，例如：#3.6深渊怪物，如果不指定版本将自动发送最新版本深渊怪物数据")
+    await e.reply("发送 #版本号+层数+深渊怪物即可查询深渊怪物数据，例如：#3.5十二层深渊怪物，如果不指定版本或层数将自动发送当前版本深渊十一及十二层怪物数据")
   }
+
+  read_ver() {
+    let file = `./data/spiral-abyss-lineup-data/ver.yaml`
+
+    try {
+      return YAML.parse(
+        fs.readFileSync(file, 'utf8')
+      )
+    } catch (error) {
+      return false
+    }
+  }
+
 }
